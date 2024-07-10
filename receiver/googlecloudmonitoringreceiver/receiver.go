@@ -12,6 +12,8 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 
+	"github.com/avast/retry-go/v3"
+
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"google.golang.org/genproto/googleapis/api/metric"
@@ -22,6 +24,11 @@ import (
 	"cloud.google.com/go/monitoring/apiv3/v2/monitoringpb"
 
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
+)
+
+const (
+	maxConnectionRetries = 3
+	retryDelayDuration   = 5 * time.Second
 )
 
 type monitoringReceiver struct {
@@ -46,13 +53,14 @@ func (mr *monitoringReceiver) Start(ctx context.Context, _ component.Host) error
 
 	var startErr error
 	mr.startOnce.Do(func() {
-		client, err := monitoring.NewMetricClient(ctx, option.WithCredentialsFile(servicePath))
-		if err != nil {
-			startErr = fmt.Errorf("failed to create a monitoring client: %v", err)
-			return
-		}
-
-		mr.client = client
+		startErr = retry.Do(func() error {
+			client, err := monitoring.NewMetricClient(ctx, option.WithCredentialsFile(servicePath))
+			if err != nil {
+				return fmt.Errorf("failed to create a monitoring client: %v", err)
+			}
+			mr.client = client
+			return nil
+		}, retry.Attempts(maxConnectionRetries), retry.Delay(retryDelayDuration))
 	})
 
 	return startErr
@@ -108,7 +116,6 @@ func (mr *monitoringReceiver) Scrape(ctx context.Context) (pmetric.Metrics, erro
 		// Iterate over the time series data
 		for {
 			timeSeriesMetrics, err := it.Next()
-
 			if timeSeriesMetrics == nil && err != nil {
 				if err == iterator.Done {
 					mr.logger.Info(iterator.Done.Error())
