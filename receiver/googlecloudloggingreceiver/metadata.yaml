@@ -1,0 +1,15 @@
+type: googlecloudlogging
+scope_name: otelcol/googlecloudloggingreceiver
+
+status:
+  class: receiver
+  stability:
+    development: [logs]
+  distributions: [contrib]
+  codeowners:
+    active: [dashpole, TylerHelmuth, datsabk]
+
+tests:
+  config:
+  goleak:
+    skip: true
