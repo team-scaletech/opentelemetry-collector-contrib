@@ -1,0 +1,43 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  googlecloudmonitoring: # this line represents the ID of your receiver
+    collection_interval: 3600s
+    region: us-central1
+    project_id: cloudwerx-otel-integration-dev
+    service_account_key: "/path/to/your/service_account_key.json"
+    services:
+      - service_name: "compute"
+        metric_name: "compute.googleapis.com/instance/cpu/usage_time"
+        delay: 3600s
+
+processors:
+  batch:
+
+exporters:
+  debug:
+    verbosity: detailed
+  otlp/metrics:
+    endpoint: "https://api.honeycomb.io:443" # US instance
+    headers:
+      "x-honeycomb-team": "<your-api-key>"
+      "x-honeycomb-dataset": "<your-dataset-name>"
+
+service:
+  extensions: []
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
+    metrics: # Add a metrics pipeline
+      receivers: [googlecloudmonitoring]
+      processors: [batch]
+      exporters: [otlp/metrics, debug]
+  telemetry:
+    logs:
+      level: debug
